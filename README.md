@@ -1,5 +1,5 @@
 # Pathfinder
-Experimenting with pathfinding
+Experimenting with pathfinding.\n
 This project is my workshop for experimentation and learning pathfinding.
 As my endgoal is to assimilate this into my game development, I am using Monogame/XNA.
 
