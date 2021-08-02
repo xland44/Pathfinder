@@ -2,6 +2,7 @@
 using Microsoft.Xna.Framework.Graphics;
 using Microsoft.Xna.Framework.Input;
 using System.Diagnostics;
+using System.Collections.Generic;
 
 namespace SpaceGame
 {
@@ -11,7 +12,7 @@ namespace SpaceGame
         private SpriteBatch _spriteBatch;
         private Texture2D tileAtlas;
         private int[,] map = new int[50, 50]{
-                                {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+                                {1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
 {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
 {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
 {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
@@ -92,6 +93,7 @@ namespace SpaceGame
         {
             _spriteBatch = new SpriteBatch(GraphicsDevice);
             tileAtlas = Content.Load<Texture2D>("sprites/tileAtlas");
+            Debug.WriteLine("Game is loaded!");
             // TODO: use this.Content to load your game content here
         }
 
@@ -122,28 +124,80 @@ namespace SpaceGame
                 int rowNo = _mouseState.Y / tileSize;
                 int columnNo = _mouseState.X / tileSize;
                 map[rowNo, columnNo] = 2;
+                BreadthSearch(new Point(rowNo, columnNo));
             }
 
             base.Update(gameTime);
         }
 
+        //gets a tile id (from the map array), and returns the relevant dimensions from the sprite atlas (e.g "2" returns a rectangle containing the third tile in the atlas)
+        protected Rectangle GetDrawRectFromTileID(int i)
+        {
+            int totalColumns = tileAtlas.Width / tileSize; //total columns in the sprite atlas.
+            int currentRow = (int)((float)i / (float)totalColumns);
+            int currentColumn = i % totalColumns;
+            return new Rectangle(currentColumn*tileSize, currentRow * tileSize, tileSize, tileSize);
+        }
         protected override void Draw(GameTime gameTime)
         {
             GraphicsDevice.Clear(Color.White);
             // TODO: Add your drawing code here
             _spriteBatch.Begin();
-            Rectangle source = new Rectangle(0, 0, 16, 16);
 
             for (int columnNo = 0; columnNo < gameMapColumnCount; columnNo++)
             {
                 for (int rowNo = 0; rowNo < gameMapRowCount; rowNo++)
                 {
-                    _spriteBatch.Draw(tileAtlas, new Rectangle(columnNo * tileSize, rowNo*tileSize, tileSize, tileSize), new Rectangle(map[rowNo,columnNo]*tileSize,0,tileSize,tileSize), Color.White);
+                    _spriteBatch.Draw(tileAtlas, new Rectangle(columnNo * tileSize, rowNo*tileSize, tileSize, tileSize), GetDrawRectFromTileID(map[rowNo,columnNo]), Color.White);
                 }
             }
             base.Draw(gameTime);
             _spriteBatch.End();
         }
+        protected enum _direction { Up, Right, Down, Left }
+        protected Point? GetNeighbor(_direction dir, Point nexus) // finds all adjacent squares to
+        {
+            //important to note: Point Nexus is a pairing of two numbers that represent a [row,column] that translate to
+            //map coordinates. so in reality nexus.X represents the map Y coordinates (row#), whilst nexus.Y represents the map X coordinates (column#)!!
+            if (dir == _direction.Up && nexus.X > 0)
+                return new Point(nexus.X - 1, nexus.Y);
+            else if (dir == _direction.Right && nexus.Y < gameMapColumnCount-1) //-1 because arrays are 0-index
+                return new Point(nexus.X, nexus.Y + 1);
+            else if (dir == _direction.Down && nexus.X < gameMapRowCount-1)
+                return new Point(nexus.X + 1, nexus.Y);
+            else if (dir == _direction.Left && nexus.Y > 0)
+                return new Point(nexus.X, nexus.Y - 1);
+            else return null;
+        }
+        protected void BreadthSearch(Point startlocation)
+        {
+            Queue<Point> frontier = new Queue<Point>();
+            frontier.Enqueue(startlocation);
+            Dictionary<Point, Point> came_from = new Dictionary<Point, Point>(); // dict keys are current tile, value is which tile it came from (https://www.redblobgames.com/pathfinding/a-star/introduction.html)
 
+            while(frontier.Count>0)
+            {
+                Point current = frontier.Dequeue();
+                for (int i = (int)_direction.Up; i <= (int)_direction.Left; i++)
+                {
+                    Point neighbor;
+                    if (GetNeighbor((_direction)i, current) is null) // if null point (point is out of bounds of game) skip to next neighbor
+                        continue;
+                    else neighbor = (Point)GetNeighbor((_direction)i, current);
+
+                    if (neighbor.X < 0 || neighbor.Y < 0) // if null, skip to next iteration of loop
+                        continue;
+
+                    if(!(came_from.ContainsKey(neighbor)))
+                    { 
+                        came_from.Add(neighbor, current);
+                        frontier.Enqueue(neighbor);
+                        map[neighbor.X, neighbor.Y] = 3;
+                    }
+                    else
+                        map[neighbor.X, neighbor.Y] = 4;
+                }
+            }
+        }
     }
 }
